@@ -1,0 +1,9 @@
+.env
+chroma_store/
+__pycache__/
+*.pyc
+.omc/
+.venv/
+venv/
+.idea/
+.vscode/
