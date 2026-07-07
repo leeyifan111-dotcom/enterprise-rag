@@ -20,11 +20,15 @@ with st.sidebar:
 
     # 获取分类列表
     try:
-        cats = requests.get(f"{API}/categories", timeout=3).json()["categories"]
+        cats_cn = requests.get(f"{API}/categories", timeout=3).json()["categories"]
     except Exception:
-        cats = ["技术文档", "规章制度", "产品手册", "培训资料", "FAQ"]
+        cats_cn = ["技术文档", "规章制度", "产品手册", "培训资料", "FAQ"]
 
-    category = st.selectbox("选择分类", cats)
+    # 中文名→英文 key 映射
+    CN_TO_KEY = {"技术文档": "tech_doc", "规章制度": "policy", "产品手册": "product", "培训资料": "training", "FAQ": "faq"}
+
+    cat_cn = st.selectbox("选择分类", cats_cn)
+    cat_key = CN_TO_KEY.get(cat_cn, "faq")
 
     uploaded_file = st.file_uploader("上传文件", type=["md", "txt", "pdf"])
     if uploaded_file and st.button("上传并建索引"):
@@ -32,7 +36,7 @@ with st.sidebar:
             resp = requests.post(
                 f"{API}/upload",
                 files={"file": (uploaded_file.name, uploaded_file.getvalue())},
-                data={"category": category},
+                data={"category": cat_key},
             )
             if resp.status_code == 200:
                 data = resp.json()

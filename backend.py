@@ -9,7 +9,7 @@ GET  /stats    → 各分类索引统计
 
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from core import ask, build_index, classify, CATEGORIES, CHROMA_DIR
+from core import ask, build_index, classify, CATEGORIES, CATEGORY_MAP, CHROMA_DIR
 import os
 import shutil
 
@@ -32,9 +32,9 @@ def chat(query: str, category: str = None):
 @app.post("/upload")
 def upload(file: UploadFile = File(...), category: str = Form(...)):
     if category not in CATEGORIES:
-        return {"error": f"分类 {category} 不存在，可选: {CATEGORIES}"}
+        return {"error": f"分类 {category} 不存在，可选: {list(CATEGORY_MAP.values())}"}
 
-    cat_dir = os.path.join("knowledge", category)
+    cat_dir = os.path.join("knowledge", CATEGORY_MAP[category])
     os.makedirs(cat_dir, exist_ok=True)
 
     filepath = os.path.join(cat_dir, file.filename)
@@ -42,12 +42,12 @@ def upload(file: UploadFile = File(...), category: str = Form(...)):
         shutil.copyfileobj(file.file, f)
 
     stats = build_index("knowledge", category)
-    return {"status": "ok", "file": file.filename, "category": category, "chunks": stats.get(category, 0)}
+    return {"status": "ok", "file": file.filename, "category": CATEGORY_MAP[category], "chunks": stats.get(category, 0)}
 
 
 @app.get("/categories")
 def list_categories():
-    return {"categories": CATEGORIES}
+    return {"categories": list(CATEGORY_MAP.values())}
 
 
 @app.get("/stats")
@@ -58,9 +58,9 @@ def stats():
     for cat in CATEGORIES:
         try:
             col = client.get_collection(f"rag_{cat}")
-            result[cat] = col.count()
+            result[CATEGORY_MAP[cat]] = col.count()
         except Exception:
-            result[cat] = 0
+            result[CATEGORY_MAP[cat]] = 0
     return result
 
 

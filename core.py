@@ -35,15 +35,35 @@ RRF_K = 60
 
 _chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
 
-# 预定义知识分类
-CATEGORIES = ["技术文档", "规章制度", "产品手册", "培训资料", "FAQ"]
+# 预定义知识分类（key=英文标识，value=中文显示名）
+CATEGORY_MAP = {
+    "tech_doc": "技术文档",
+    "policy": "规章制度",
+    "product": "产品手册",
+    "training": "培训资料",
+    "faq": "FAQ",
+}
+CATEGORIES = list(CATEGORY_MAP.keys())
+
+# 中文名→key 反查
+CATEGORY_NAMES = {v: k for k, v in CATEGORY_MAP.items()}
+
+
+def _cat_dir(cat: str) -> str:
+    """分类名 → knowledge/ 子目录名（中文）"""
+    return CATEGORY_MAP.get(cat, cat)
+
+
+def _cat_collection(cat: str) -> str:
+    """分类名 → Chroma collection 名（英文）"""
+    return f"rag_{cat}"
 
 
 # ── 自动分类 ──────────────────────────────────────────────
 
 def classify(query: str) -> str:
-    """判断用户问题属于哪个知识分类"""
-    cats = "\n".join(f"- {c}" for c in CATEGORIES)
+    """判断用户问题属于哪个知识分类，返回英文 key"""
+    cats = "\n".join(f"- {v}" for v in CATEGORY_MAP.values())
     resp = llm_client.chat.completions.create(
         model="deepseek-chat",
         messages=[{
@@ -52,8 +72,8 @@ def classify(query: str) -> str:
         }],
     )
     result = resp.choices[0].message.content.strip()
-    # 兜底：如果 LLM 输出不在列表，回退到 FAQ
-    return result if result in CATEGORIES else "FAQ"
+    # 中文名→英文 key 反查，失败回退 faq
+    return CATEGORY_NAMES.get(result, "faq")
 
 
 # ── 建索引 ────────────────────────────────────────────────
@@ -83,7 +103,7 @@ def build_index(docs_dir: str = "knowledge", category: str = None) -> dict:
     categories = [category] if category else CATEGORIES
 
     for cat in categories:
-        cat_dir = os.path.join(docs_dir, cat)
+        cat_dir = os.path.join(docs_dir, _cat_dir(cat))
         if not os.path.isdir(cat_dir):
             continue
 
@@ -94,7 +114,7 @@ def build_index(docs_dir: str = "knowledge", category: str = None) -> dict:
             if not fname.endswith((".md", ".txt")):
                 continue
             with open(fpath, "r", encoding="utf-8") as f:
-                docs.append({"text": f.read(), "source": f"{cat}/{fname}"})
+                docs.append({"text": f.read(), "source": f"{_cat_dir(cat)}/{fname}"})
 
         if not docs:
             result[cat] = 0
@@ -115,8 +135,8 @@ def build_index(docs_dir: str = "knowledge", category: str = None) -> dict:
             resp = embed_client.embeddings.create(model="BAAI/bge-m3", input=batch)
             vectors.extend([d.embedding for d in resp.data])
 
-        # 存入 Chroma collection（每个分类一个 collection）
-        collection = _chroma_client.get_or_create_collection(f"rag_{cat}")
+        # 存入 Chroma collection（英文名）
+        collection = _chroma_client.get_or_create_collection(_cat_collection(cat))
         existing = collection.get()
         if existing["ids"]:
             collection.delete(ids=existing["ids"])
@@ -149,7 +169,7 @@ def _bm25_search(query: str, chunks: list[dict], top_k: int = 20) -> list[tuple[
 
 def search(query: str, category: str, top_k: int = 5) -> list[dict]:
     """在指定分类中混合检索（向量 + BM25 + RRF）"""
-    collection = _chroma_client.get_or_create_collection(f"rag_{category}")
+    collection = _chroma_client.get_or_create_collection(_cat_collection(category))
     all_data = collection.get()
     chunks = [
         {"text": doc, "source": meta["source"] if meta else "?"}
