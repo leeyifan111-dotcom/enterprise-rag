@@ -9,6 +9,7 @@ GET  /stats    → 各分类索引统计
 
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from core import ask, build_index, classify, CATEGORIES, CATEGORY_MAP, CHROMA_DIR
 import os
 import shutil
@@ -23,9 +24,14 @@ app.add_middleware(
 )
 
 
+class ChatRequest(BaseModel):
+    query: str
+    category: str | None = None
+
+
 @app.post("/chat")
-def chat(query: str, category: str = None):
-    result = ask(query, category)
+def chat(req: ChatRequest):
+    result = ask(req.query, req.category)
     return result
 
 

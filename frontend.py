@@ -76,7 +76,7 @@ if prompt := st.chat_input("输入你的问题..."):
     with st.chat_message("assistant"):
         with st.spinner("思考中..."):
             try:
-                resp = requests.get(f"{API}/chat", params={"query": prompt}, timeout=30)
+                resp = requests.post(f"{API}/chat", json={"query": prompt}, timeout=30)
                 data = resp.json()
             except Exception:
                 data = {"answer": "后端未启动，请先运行 python backend.py", "category": "-", "sources": []}

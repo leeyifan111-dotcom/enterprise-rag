@@ -202,35 +202,139 @@ def search(query: str, category: str, top_k: int = 5) -> list[dict]:
 
 # ── 问答 ────────────────────────────────────────────────────
 
-RAG_SYSTEM_PROMPT = """你是企业知识库助手。只能基于参考资料回答。
-不知道就说"参考资料中未包含相关内容"。标注来源。"""
+RAG_SYSTEM_PROMPT = """# 身份
+你是企业知识库 AI 助手，服务于公司内部员工。你在一个 Agent 循环里工作——
+你可以多次调用 search_knowledge 工具来查询不同分类的知识库，直到获得足够的信息后再回答。
+
+# 核心工作流程（Chain of Thought）
+1. 分析问题：这个问题涉及几个子问题？分别属于哪个分类？
+2. 逐个解决：对每个子问题，调用 search_knowledge 检索对应分类
+3. 评估完整性：检索到的资料够不够回答？不够就调整 query 或换分类再搜
+4. 综合回答：汇总所有子问题的结果，给出最终答案
+
+# 查询拆分原则
+- 复杂问题拆成多个简单子问题，逐个 query 检索
+- 例："年假制度和报销流程" → 拆为"年假制度"和"报销流程"两次检索
+- 每个子问题可以根据其内容指定不同分类（技术文档/规章制度/产品手册/培训资料/FAQ）
+
+# 工具使用规则
+- 需要知识库信息时，调用 search_knowledge 工具
+- 每次调用指定 category（分类）和 query（查询内容）
+- 检索不到相关信息时，换个 query 角度或换分类再试，最多试 2 次
+- 同一 query 在同一分类中搜 2 次仍无结果 → 放弃该子问题，告知用户
+
+# 不确定性处理
+- 资料中没有的信息，明确说"公司现有资料中未包含此信息，建议咨询 HR/行政部门"
+- 禁止推测公司政策、编造数字或日期
+
+# 输出格式
+- 先直接回答问题，再列出依据和来源
+- 计算类问题：显式写出计算过程 → 结果 → 依据条款"""
 
 
-def ask(query: str, category: str = None) -> dict:
-    """完整 RAG 流程：分类 → 检索 → 生成"""
-    if category is None:
-        category = classify(query)
+# ── Agent 工具定义 ─────────────────────────────────────────
 
-    chunks = search(query, category)
+_tool_schema = [{
+    "type": "function",
+    "function": {
+        "name": "search_knowledge",
+        "description": "搜索企业知识库。指定分类和查询内容，返回相关文档片段。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "category": {"type": "string", "description": "知识分类: tech_doc/policy/product/training/faq"},
+                "query": {"type": "string", "description": "要查询的具体问题"},
+            },
+            "required": ["category", "query"],
+        },
+    },
+}]
+
+
+def _search_tool(category: str, query: str) -> str:
+    """工具函数：检索并返回格式化结果"""
+    chunks = search(query, category, top_k=3)
     if not chunks:
-        return {
-            "answer": "未找到相关知识。请确认知识库已导入相关资料。",
-            "category": category,
-            "sources": [],
-        }
-
-    context = "\n\n".join(
-        f"[{c['source']}]\n{c['text']}" for c in chunks[:5]
+        return f"（在 {category} 中未找到相关内容）"
+    return "\n\n".join(
+        f"[来源: {c['source']}]\n{c['text']}" for c in chunks
     )
-    resp = llm_client.chat.completions.create(
+
+
+# ── Agentic RAG 问答 ─────────────────────────────────────
+
+def ask(query: str, category: str = None, max_turns: int = 6) -> dict:
+    """Agentic RAG：LLM 在循环中自主检索，含 CoT + query 拆分
+
+    - CoT: 每步先 thought 再决定是否调工具
+    - 查询拆分: LLM 可将复杂问题拆成多个子问题，多次调 search_knowledge
+    - 循环控制: max_turns 上限，重复决策检测
+    """
+    messages = [
+        {"role": "system", "content": RAG_SYSTEM_PROMPT},
+        {"role": "user", "content": query},
+    ]
+
+    tools = _tool_schema
+    seen_sigs = set()
+    all_sources = set()
+
+    for turn in range(max_turns):
+        resp = llm_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=messages,
+            tools=tools,
+        )
+        msg = resp.choices[0].message
+        messages.append(msg)
+
+        # CoT 思考过程
+        if msg.content:
+            print(f"  [Turn {turn}] {msg.content[:120]}")
+
+        # 不再要工具 → 给出最终答案
+        if not msg.tool_calls:
+            return {
+                "answer": msg.content or "",
+                "category": category or classify(query),
+                "sources": list(all_sources),
+            }
+
+        # 循环检测：同一轮决策是否重复
+        sig = "|".join(sorted(
+            f"{c.function.name}({c.function.arguments})" for c in msg.tool_calls
+        ))
+        if sig in seen_sigs:
+            print(f"  Loop detected, forcing stop")
+            break
+        seen_sigs.add(sig)
+
+        # 逐个执行工具调用
+        for call in msg.tool_calls:
+            if call.function.name != "search_knowledge":
+                continue
+            args = json.loads(call.function.arguments)
+            result = _search_tool(
+                category=args.get("category", "faq"),
+                query=args.get("query", query),
+            )
+            all_sources.update(
+                line.split("]")[0].replace("[来源: ", "")
+                for line in result.split("\n") if line.startswith("[来源:")
+            )
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": result,
+            })
+
+    # 达到 max_turns，让 LLM 强行总结
+    final = llm_client.chat.completions.create(
         model="deepseek-chat",
-        messages=[
-            {"role": "system", "content": RAG_SYSTEM_PROMPT},
-            {"role": "user", "content": f"参考资料：\n{context}\n\n问题：{query}"},
-        ],
+        messages=messages + [{"role": "user", "content": "请基于已获取的资料，给出当前能得出的最佳答案。"}],
     )
     return {
-        "answer": resp.choices[0].message.content,
-        "category": category,
-        "sources": list({c["source"] for c in chunks}),
+        "answer": final.choices[0].message.content,
+        "category": category or classify(query),
+        "sources": list(all_sources),
     }
