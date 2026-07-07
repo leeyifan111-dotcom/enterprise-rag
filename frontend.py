@@ -23,6 +23,12 @@ if "session_config" not in st.session_state:
     st.session_state.session_config = {"system_prompt": "", "search_top_k": 5, "max_turns": 6}
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "default_prompt" not in st.session_state:
+    try:
+        resp = requests.get(f"{API}/default-prompt", timeout=3)
+        st.session_state.default_prompt = resp.json()["system_prompt"]
+    except Exception:
+        st.session_state.default_prompt = ""
 if "doc_category" not in st.session_state:
     st.session_state.doc_category = "tech_doc"
 if "edit_file" not in st.session_state:
@@ -129,24 +135,21 @@ with st.sidebar:
         with st.expander("当前会话配置", expanded=False):
             sid = st.session_state.current_session_id
 
+            # 空则展示默认 prompt
+            current_prompt = st.session_state.session_config.get("system_prompt", "")
+            display_prompt = current_prompt if current_prompt else st.session_state.default_prompt
+
             prompt_val = st.text_area(
                 "系统提示词",
-                value=st.session_state.session_config.get("system_prompt", ""),
+                value=display_prompt,
                 height=200,
                 key="cfg_prompt",
                 help="自定义 AI 助手的角色和行为规则",
-                placeholder="留空使用默认 RAG 提示词...",
             )
 
             if st.button("重置为默认提示词", key="reset_prompt"):
-                try:
-                    resp = requests.get(f"{API}/default-prompt", timeout=3)
-                    if resp.status_code == 200:
-                        default = resp.json()["system_prompt"]
-                        st.session_state.session_config["system_prompt"] = default
-                        st.rerun()
-                except Exception:
-                    pass
+                st.session_state.session_config["system_prompt"] = st.session_state.default_prompt
+                st.rerun()
 
             topk_val = st.slider(
                 "搜索 Top-K", 1, 20,
