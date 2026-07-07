@@ -78,7 +78,7 @@ def classify(query: str) -> str:
 
 # ── 建索引 ────────────────────────────────────────────────
 
-def _chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]:
+def _chunk_text(text: str, chunk_size: int = 1000, overlap: int = 150) -> list[str]:
     """固定长度分块 + 句子边界保护"""
     sentences = text.replace("\n", " ").split("。")
     chunks, current = [], ""

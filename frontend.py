@@ -81,12 +81,16 @@ if prompt := st.chat_input("输入你的问题..."):
             except Exception:
                 data = {"answer": "后端未启动，请先运行 python backend.py", "category": "-", "sources": []}
 
-        st.markdown(data["answer"])
-        if data["sources"]:
-            st.caption(f"来源: {', '.join(data['sources'])} | 分类: {data['category']}")
+        answer = data.get("answer", f"后端错误: {data}")
+        sources = data.get("sources", [])
+        category = data.get("category", "-")
+
+        st.markdown(answer)
+        if sources:
+            st.caption(f"来源: {', '.join(sources)} | 分类: {category}")
 
     st.session_state.messages.append({
         "role": "assistant",
-        "content": data["answer"],
-        "sources": data.get("sources", []),
+        "content": answer,
+        "sources": sources,
     })
