@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from core import (
     ask, build_index, classify, delete_doc_chunks, remove_category_index,
     CATEGORIES, CATEGORY_MAP, CHROMA_DIR, RAGConfig, replace, _config,
+    RAG_SYSTEM_PROMPT,
 )
 import os
 import json
@@ -181,6 +182,13 @@ def stats():
     return result
 
 
+# ── 默认 prompt ─────────────────────────────────────────
+
+@app.get("/default-prompt")
+def default_prompt():
+    return {"system_prompt": RAG_SYSTEM_PROMPT}
+
+
 # ═══════════════════════════════════════════════════════════
 # 会话管理
 # ═══════════════════════════════════════════════════════════
@@ -211,7 +219,7 @@ def create_session(req: SessionCreate):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "config": {
-            "system_prompt": "",
+            "system_prompt": RAG_SYSTEM_PROMPT,
             "search_top_k": 5,
             "max_turns": 6,
         },

@@ -134,9 +134,19 @@ with st.sidebar:
                 value=st.session_state.session_config.get("system_prompt", ""),
                 height=200,
                 key="cfg_prompt",
-                help="留空则使用默认提示词",
+                help="自定义 AI 助手的角色和行为规则",
                 placeholder="留空使用默认 RAG 提示词...",
             )
+
+            if st.button("重置为默认提示词", key="reset_prompt"):
+                try:
+                    resp = requests.get(f"{API}/default-prompt", timeout=3)
+                    if resp.status_code == 200:
+                        default = resp.json()["system_prompt"]
+                        st.session_state.session_config["system_prompt"] = default
+                        st.rerun()
+                except Exception:
+                    pass
 
             topk_val = st.slider(
                 "搜索 Top-K", 1, 20,
