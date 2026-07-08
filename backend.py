@@ -123,7 +123,8 @@ def chat(req: ChatRequest):
         if sp.strip():
             system_prompt = sp
 
-    result = ask(req.query, req.category, config=cfg, system_prompt=system_prompt)
+    history = session.get("messages", []) if session else []
+    result = ask(req.query, req.category, config=cfg, system_prompt=system_prompt, history=history)
 
     # 保存消息到会话
     if session:
