@@ -267,6 +267,8 @@ def update_session(session_id: str, req: SessionUpdate):
         config["search_top_k"] = req.search_top_k
     if req.max_turns is not None:
         config["max_turns"] = req.max_turns
+    if req.retrieval_on is not None:
+        config["retrieval_on"] = req.retrieval_on
     _save_session(session)
     return session
 
