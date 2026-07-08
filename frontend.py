@@ -224,14 +224,25 @@ with st.sidebar:
                         st.success(f"已删除 {f['name']}")
                         st.rerun()
 
-        if st.button("🔄 重建全部索引", use_container_width=True, key="reindex_all"):
-            with st.spinner("重建索引中..."):
-                resp = requests.post(f"{API}/documents/reindex", timeout=60)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    st.success(f"索引重建完成: {data['stats']}")
-                else:
-                    st.error("重建失败")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 重建当前分类索引", use_container_width=True, key=f"reindex_{cat_key}"):
+                with st.spinner("重建索引中..."):
+                    resp = requests.post(f"{API}/documents/reindex", json={"category": cat_key}, timeout=60)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        st.success(f"{cat_cn} 索引已重建: {data['stats']}")
+                    else:
+                        st.error("重建失败")
+        with col2:
+            if st.button("🔄 重建全部索引", use_container_width=True, key="reindex_all"):
+                with st.spinner("重建索引中..."):
+                    resp = requests.post(f"{API}/documents/reindex", timeout=60)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        st.success(f"索引重建完成: {data['stats']}")
+                    else:
+                        st.error("重建失败")
 
     st.divider()
 

@@ -395,10 +395,15 @@ def delete_document(category: str, filename: str):
     return {"status": "deleted", "filename": filename, "deleted_chunks": deleted_chunks}
 
 
+class ReindexRequest(BaseModel):
+    category: str | None = None
+
+
 @app.post("/documents/reindex")
-def reindex_all():
-    """全量重建所有分类索引"""
-    stats = build_index("knowledge")
+def reindex_all(req: ReindexRequest | None = None):
+    """重建索引——指定单个分类或全部"""
+    cat = req.category if req else None
+    stats = build_index("knowledge", category=cat)
     return {"status": "ok", "stats": {CATEGORY_MAP.get(c, c): n for c, n in stats.items()}}
 
 
