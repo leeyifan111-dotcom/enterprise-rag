@@ -327,31 +327,48 @@ else:
 
     # 输入框
     if prompt := st.chat_input("输入你的问题..."):
+        # 先把用户消息存起来（不管后面是否停止，这次输入不丢）
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        with st.chat_message("assistant"):
-            with st.spinner("思考中..."):
-                try:
-                    body = {
-                        "query": prompt,
-                        "session_id": st.session_state.current_session_id,
-                        "search_top_k": st.session_state.session_config.get("search_top_k", 5),
-                        "max_turns": st.session_state.session_config.get("max_turns", 6),
-                    }
-                    resp = requests.post(f"{API}/chat", json=body, timeout=60)
-                    data = resp.json()
-                except Exception:
-                    data = {"answer": "后端未启动，请先运行 python backend.py", "category": "-", "sources": []}
+        # 停止按钮（生成期间可见）
+        stop_col, _ = st.columns([1, 5])
+        with stop_col:
+            stop_clicked = st.button("🛑 停止回答", key="stop_btn", type="primary")
 
-            answer = data.get("answer", f"后端错误: {data}")
-            sources = data.get("sources", [])
-            category = data.get("category", "-")
+        if stop_clicked:
+            st.warning("已停止生成")
+        else:
+            with st.chat_message("assistant"):
+                with st.spinner("思考中..."):
+                    try:
+                        body = {
+                            "query": prompt,
+                            "session_id": st.session_state.current_session_id,
+                            "search_top_k": st.session_state.session_config.get("search_top_k", 5),
+                            "max_turns": st.session_state.session_config.get("max_turns", 6),
+                        }
+                        resp = requests.post(f"{API}/chat", json=body, timeout=60)
+                        data = resp.json()
+                    except Exception:
+                        data = {"answer": "后端未启动，请先运行 python backend.py", "category": "-", "sources": []}
 
-            st.markdown(answer)
-            if sources:
-                st.caption(f"来源: {', '.join(sources)} | 分类: {category}")
+                answer = data.get("answer", f"后端错误: {data}")
+                sources = data.get("sources", [])
+                category = data.get("category", "-")
 
-        # 重新从服务器加载最新消息（因为 ask 已经把消息存入 session 了）
+                st.markdown(answer)
+                if sources:
+                    st.caption(f"来源: {', '.join(sources)} | 分类: {category}")
+
+                # 保存到 session
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": answer,
+                    "sources": sources,
+                    "category": category,
+                })
+
+        # 刷新 session 数据（前端状态同步）
         load_session(st.session_state.current_session_id)

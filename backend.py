@@ -104,6 +104,12 @@ def chat(req: ChatRequest):
     if req.session_id:
         session = _load_session(req.session_id)
 
+    # 先把用户消息存入会话（保证用户在点停止按钮后问题也不丢）
+    if session:
+        now = datetime.now(timezone.utc).isoformat()
+        session["messages"].append({"role": "user", "content": req.query, "timestamp": now})
+        _save_session(session)
+
     # 构建 config 覆盖
     overrides = {}
     if req.search_top_k is not None:
@@ -123,13 +129,11 @@ def chat(req: ChatRequest):
         if sp.strip():
             system_prompt = sp
 
-    history = session.get("messages", []) if session else []
+    history = session.get("messages", [])[:-1] if session else []  # 最后一条是刚加的用户消息，不纳入 history（ask 内部会加）
     result = ask(req.query, req.category, config=cfg, system_prompt=system_prompt, history=history)
 
-    # 保存消息到会话
+    # 仅追加 assistant 回复（用户消息已提前存入）
     if session:
-        now = datetime.now(timezone.utc).isoformat()
-        session["messages"].append({"role": "user", "content": req.query, "timestamp": now})
         session["messages"].append({
             "role": "assistant",
             "content": result["answer"],
