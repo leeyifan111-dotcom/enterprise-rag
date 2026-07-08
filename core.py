@@ -261,10 +261,9 @@ RAG_SYSTEM_PROMPT = """
 - 每个子问题可以根据其内容指定不同分类（技术文档/规章制度/产品手册/培训资料/FAQ）
 
 # 工具使用规则
-- 需要知识库信息时，调用 search_knowledge 工具
-- 每次调用指定 category（分类）和 query（查询内容）
+- 需要知识库信息时，调用 search_knowledge 工具（指定 category 和 query）
+- 需要数学计算时（年假天数、薪资），调用 calculator 工具
 - 检索不到相关信息时，换个 query 角度或换分类再试，最多试 2 次
-- 同一 query 在同一分类中搜 2 次仍无结果 → 放弃该子问题，告知用户
 
 # 不确定性处理
 - 资料中没有的信息，明确说"公司现有资料中未包含此信息，建议咨询 HR/行政部门"
@@ -277,21 +276,61 @@ RAG_SYSTEM_PROMPT = """
 
 # ── Agent 工具定义 ─────────────────────────────────────────
 
-_tool_schema = [{
-    "type": "function",
-    "function": {
-        "name": "search_knowledge",
-        "description": "搜索企业知识库。指定分类和查询内容，返回相关文档片段。",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "category": {"type": "string", "description": "知识分类: tech_doc/policy/product/training/faq"},
-                "query": {"type": "string", "description": "要查询的具体问题"},
+_tool_schema = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_knowledge",
+            "description": "搜索企业知识库。指定分类和查询内容，返回相关文档片段。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string", "description": "知识分类: tech_doc/policy/product/training/faq"},
+                    "query": {"type": "string", "description": "要查询的具体问题"},
+                },
+                "required": ["category", "query"],
             },
-            "required": ["category", "query"],
         },
     },
-}]
+    {
+        "type": "function",
+        "function": {
+            "name": "calculator",
+            "description": "计算数学表达式。用于年假天数、薪资、报销金额等精确计算。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "数学表达式，如 5*8+2"},
+                },
+                "required": ["expression"],
+            },
+        },
+    },
+]
+
+# 工具名 → 函数映射
+_tool_registry: dict[str, callable] = {}
+
+
+def register_tool(name: str, func: callable):
+    """注册自定义工具函数"""
+    _tool_registry[name] = func
+
+
+# 注册内置工具
+register_tool("search_knowledge", _search_tool)
+register_tool("calculator", lambda **kw: str(eval(kw["expression"])) if kw.get("expression") else "0")
+
+
+def _dispatch_tool(name: str, args: dict, config: RAGConfig | None = None) -> str:
+    """派发工具调用"""
+    func = _tool_registry.get(name)
+    if not func:
+        return f"未知工具: {name}"
+    try:
+        return func(**args) if name != "search_knowledge" else func(config=config, **args)
+    except Exception as e:
+        return f"工具 {name} 执行失败: {e}"
 
 
 def _search_tool(category: str, query: str, config: RAGConfig | None = None) -> str:
@@ -360,18 +399,17 @@ def ask(query: str, category: str = None, max_turns: int | None = None,
 
         # 逐个执行工具调用
         for call in msg.tool_calls:
-            if call.function.name != "search_knowledge":
-                continue
+            name = call.function.name
             args = json.loads(call.function.arguments)
-            result = _search_tool(
-                category=args.get("category", "faq"),
-                query=args.get("query", query),
-                config=cfg,
-            )
-            all_sources.update(
-                line.split("]")[0].replace("[来源: ", "")
-                for line in result.split("\n") if line.startswith("[来源:")
-            )
+            result = _dispatch_tool(name, args, config=cfg)
+
+            # 收集 search_knowledge 的来源
+            if name == "search_knowledge":
+                all_sources.update(
+                    line.split("]")[0].replace("[来源: ", "")
+                    for line in result.split("\n") if line.startswith("[来源:")
+                )
+
             messages.append({
                 "role": "tool",
                 "tool_call_id": call.id,
