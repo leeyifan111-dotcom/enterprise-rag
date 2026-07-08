@@ -1,6 +1,20 @@
 # 更新日志
 
-## 2026-07-08
+## 2026-07-08（后续迭代）
+
+### 🔧 优化
+
+- **并行检索**：system prompt 引导 LLM 对互不依赖的子问题并行调用 search_knowledge，减少轮次
+- **max_turns 降为 4**：并行后 Agent 循环需求减少，6→4 降低响应延迟
+
+### 🐛 修复
+
+- **切换会话时配置面板不更新**：widget key 绑定 session_id，切换会话自动重建新鲜 widget（Streamlit key 缓存机制导致 value= 被忽略）
+- **会话配置保存时 retrieval_on 丢失**：`update_session` 端点漏处理 retrieval_on 字段，保存后被丢弃
+
+---
+
+## 2026-07-08（当日主要提交）
 
 ### ✨ 新增
 
