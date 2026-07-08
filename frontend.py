@@ -169,11 +169,11 @@ with st.sidebar:
 # 主区域：标签页
 # ═══════════════════════════════════════════════════════════
 
-tab_chat, tab_docs = st.tabs(["💬 对话", "📄 文档管理"])
+page = st.radio("导航", ["💬 对话", "📄 文档管理"], horizontal=True, label_visibility="collapsed")
 
-# ── Tab 1: 对话 ────────────────────────────────────────
+# ── 对话 ──────────────────────────────────────────────
 
-with tab_chat:
+if page == "💬 对话":
     if not st.session_state.current_session_id:
         st.info("请先在左侧创建一个会话，或选择已有会话")
     else:
@@ -232,7 +232,7 @@ with tab_chat:
 
 # ── Tab 2: 文档管理 ────────────────────────────────────
 
-with tab_docs:
+elif page == "📄 文档管理":
     cat_cn = st.selectbox("选择分类", list(CN_TO_KEY.keys()), key="doc_cat_select")
     cat_key = CN_TO_KEY[cat_cn]
 
