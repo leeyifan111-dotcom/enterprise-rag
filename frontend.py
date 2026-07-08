@@ -163,13 +163,21 @@ with st.sidebar:
                 key="cfg_turns",
             )
 
+            retrieval_on = st.toggle(
+                "启用知识库检索",
+                value=st.session_state.session_config.get("retrieval_on", True),
+                key="cfg_retrieval",
+                help="关闭后 AI 将直接回答，不会搜索企业知识库",
+            )
+
             if st.button("保存配置", key="save_config"):
                 requests.put(f"{API}/sessions/{sid}", json={
                     "system_prompt": prompt_val,
                     "search_top_k": topk_val,
                     "max_turns": turns_val,
+                    "retrieval_on": retrieval_on,
                 }, timeout=3)
-                st.session_state.session_config = {"system_prompt": prompt_val, "search_top_k": topk_val, "max_turns": turns_val}
+                st.session_state.session_config = {"system_prompt": prompt_val, "search_top_k": topk_val, "max_turns": turns_val, "retrieval_on": retrieval_on}
                 load_sessions()
                 st.success("已保存")
 
@@ -348,6 +356,7 @@ else:
                             "session_id": st.session_state.current_session_id,
                             "search_top_k": st.session_state.session_config.get("search_top_k", 5),
                             "max_turns": st.session_state.session_config.get("max_turns", 6),
+                            "retrieval_on": st.session_state.session_config.get("retrieval_on", True),
                         }
                         resp = requests.post(f"{API}/chat", json=body, timeout=60)
                         data = resp.json()

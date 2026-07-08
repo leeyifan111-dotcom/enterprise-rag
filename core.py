@@ -309,36 +309,31 @@ def _search_tool(category: str, query: str, config: RAGConfig | None = None) -> 
 
 def ask(query: str, category: str = None, max_turns: int | None = None,
         config: RAGConfig | None = None, system_prompt: str | None = None,
-        history: list[dict] | None = None) -> dict:
+        history: list[dict] | None = None, retrieval_on: bool = True) -> dict:
     """Agentic RAG：LLM 在循环中自主检索，含 CoT + query 拆分
 
-    - CoT: 每步先 thought 再决定是否调工具
-    - 查询拆分: LLM 可将复杂问题拆成多个子问题，多次调 search_knowledge
-    - 循环控制: max_turns 上限，重复决策检测
-    - system_prompt: 自定义系统提示词，不传则用默认 RAG_SYSTEM_PROMPT
-    - history: 历史消息列表 [{"role":"user/assistant","content":"..."}], 确保多轮连贯
+    - retrieval_on=False: 不传 search_knowledge 工具，LLM 直接回答
     """
     cfg = config or _config
     turns = max_turns if max_turns is not None else cfg.agent_max_turns
     prompt = system_prompt if (system_prompt and system_prompt.strip()) else RAG_SYSTEM_PROMPT
 
     messages = [{"role": "system", "content": prompt}]
-    # 注入历史上下文（去掉 source/category 等额外字段，只留 role+content）
     if history:
         for h in history:
             messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": query})
 
-    tools = _tool_schema
+    # 关闭检索时不传工具——LLM 无法调用 search_knowledge，直接回答
+    tools = _tool_schema if retrieval_on else None
     seen_sigs = set()
     all_sources = set()
 
     for turn in range(turns):
-        resp = llm_client.chat.completions.create(
-            model=cfg.llm_model,
-            messages=messages,
-            tools=tools,
-        )
+        kwargs = {"model": cfg.llm_model, "messages": messages}
+        if tools:
+            kwargs["tools"] = tools
+        resp = llm_client.chat.completions.create(**kwargs)
         msg = resp.choices[0].message
         messages.append(msg)
 

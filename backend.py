@@ -78,6 +78,7 @@ class ChatRequest(BaseModel):
     category: str | None = None
     search_top_k: int | None = None
     max_turns: int | None = None
+    retrieval_on: bool | None = None
 
 
 class SessionCreate(BaseModel):
@@ -89,6 +90,7 @@ class SessionUpdate(BaseModel):
     system_prompt: str | None = None
     search_top_k: int | None = None
     max_turns: int | None = None
+    retrieval_on: bool | None = None
 
 
 class DocSaveRequest(BaseModel):
@@ -129,8 +131,15 @@ def chat(req: ChatRequest):
         if sp.strip():
             system_prompt = sp
 
-    history = session.get("messages", [])[:-1] if session else []  # 最后一条是刚加的用户消息，不纳入 history（ask 内部会加）
-    result = ask(req.query, req.category, config=cfg, system_prompt=system_prompt, history=history)
+    # 是否启用检索（默认 True）
+    retrieval_on = req.retrieval_on
+    if retrieval_on is None and session:
+        retrieval_on = session.get("config", {}).get("retrieval_on", True)
+    if retrieval_on is None:
+        retrieval_on = True
+
+    history = session.get("messages", [])[:-1] if session else []
+    result = ask(req.query, req.category, config=cfg, system_prompt=system_prompt, history=history, retrieval_on=retrieval_on)
 
     # 仅追加 assistant 回复（用户消息已提前存入）
     if session:
