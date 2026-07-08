@@ -177,6 +177,20 @@ if page == "💬 对话":
     if not st.session_state.current_session_id:
         st.info("请先在左侧创建一个会话，或选择已有会话")
     else:
+        # 可展开的知识库文档概览
+        with st.expander("📚 知识库文档概览", expanded=False):
+            for cat_cn, cat_key in CN_TO_KEY.items():
+                try:
+                    resp = requests.get(f"{API}/documents/{cat_key}", timeout=3)
+                    files = resp.json().get("files", [])
+                except Exception:
+                    files = []
+                if files:
+                    names = ", ".join(f["name"] for f in files)
+                    st.caption(f"**{cat_cn}**: {names}")
+                else:
+                    st.caption(f"**{cat_cn}**: （空）")
+
         for i, msg in enumerate(st.session_state.messages):
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
