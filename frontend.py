@@ -130,17 +130,17 @@ with st.sidebar:
             current_prompt = st.session_state.session_config.get("system_prompt", "")
             display_prompt = current_prompt if current_prompt else st.session_state.default_prompt
 
-            prompt_val = st.text_area("系统提示词", value=display_prompt, height=200, key="cfg_prompt")
-            if st.button("重置为默认", key="reset_prompt"):
+            prompt_val = st.text_area("系统提示词", value=display_prompt, height=200, key=f"cfg_prompt_{sid}")
+            if st.button("重置为默认", key=f"reset_prompt_{sid}"):
                 st.session_state.session_config["system_prompt"] = st.session_state.default_prompt
                 st.rerun()
 
-            topk_val = st.slider("搜索 Top-K", 1, 20, st.session_state.session_config.get("search_top_k", 5), key="cfg_topk")
-            turns_val = st.slider("Agent 最大轮次", 1, 10, st.session_state.session_config.get("max_turns", 6), key="cfg_turns")
-            retrieval_on = st.toggle("启用知识库检索", value=st.session_state.session_config.get("retrieval_on", True), key="cfg_retrieval",
+            topk_val = st.slider("搜索 Top-K", 1, 20, st.session_state.session_config.get("search_top_k", 5), key=f"cfg_topk_{sid}")
+            turns_val = st.slider("Agent 最大轮次", 1, 10, st.session_state.session_config.get("max_turns", 6), key=f"cfg_turns_{sid}")
+            retrieval_on = st.toggle("启用知识库检索", value=st.session_state.session_config.get("retrieval_on", True), key=f"cfg_retrieval_{sid}",
                                      help="关闭后 AI 直接回答，不搜索知识库")
 
-            if st.button("保存配置", key="save_config"):
+            if st.button("保存配置", key=f"save_config_{sid}"):
                 requests.put(f"{API}/sessions/{sid}", json={
                     "system_prompt": prompt_val, "search_top_k": topk_val,
                     "max_turns": turns_val, "retrieval_on": retrieval_on,
@@ -149,7 +149,7 @@ with st.sidebar:
                 load_sessions()
                 st.success("已保存")
 
-            if st.button("清空当前会话消息", key="clear_msgs"):
+            if st.button("清空当前会话消息", key=f"clear_msgs_{sid}"):
                 requests.post(f"{API}/sessions/{sid}/clear", timeout=3)
                 st.session_state.messages = []
                 st.rerun()
