@@ -116,10 +116,12 @@ def chat(req: ChatRequest):
         overrides["agent_max_turns"] = session["config"]["max_turns"]
     cfg = replace(_config, **overrides) if overrides else _config
 
-    # 自定义 system_prompt
+    # 自定义 system_prompt（空串视为未设置，回退默认）
     system_prompt = None
-    if session and session.get("config", {}).get("system_prompt"):
-        system_prompt = session["config"]["system_prompt"]
+    if session:
+        sp = session.get("config", {}).get("system_prompt", "")
+        if sp.strip():
+            system_prompt = sp
 
     result = ask(req.query, req.category, config=cfg, system_prompt=system_prompt)
 

@@ -244,7 +244,8 @@ def search(query: str, category: str, top_k: int | None = None, config: RAGConfi
 
 # ── 问答 ────────────────────────────────────────────────────
 
-RAG_SYSTEM_PROMPT = """# 身份
+RAG_SYSTEM_PROMPT = """
+# 身份
 你是企业知识库 AI 助手，服务于公司内部员工。你在一个 Agent 循环里工作——
 你可以多次调用 search_knowledge 工具来查询不同分类的知识库，直到获得足够的信息后再回答。
 
@@ -316,7 +317,7 @@ def ask(query: str, category: str = None, max_turns: int | None = None, config: 
     """
     cfg = config or _config
     turns = max_turns if max_turns is not None else cfg.agent_max_turns
-    prompt = system_prompt or RAG_SYSTEM_PROMPT
+    prompt = system_prompt if (system_prompt and system_prompt.strip()) else RAG_SYSTEM_PROMPT
 
     messages = [
         {"role": "system", "content": prompt},
@@ -392,7 +393,7 @@ def ask(query: str, category: str = None, max_turns: int | None = None, config: 
 # ── 文档管理 ──────────────────────────────────────────────
 
 def delete_doc_chunks(source_path: str, category: str) -> int:
-    """删除指定文档在 ChromaDB 中的所有 chunk。source_path 如 规章制度/考勤制度.md"""
+    """删除指定文档在 ChromaDB 中的所有 chunk。若分类变空则自动清理 collection"""
     try:
         collection = _chroma_client.get_collection(_cat_collection(category))
     except Exception:
@@ -406,6 +407,12 @@ def delete_doc_chunks(source_path: str, category: str) -> int:
     ]
     if ids_to_delete:
         collection.delete(ids=ids_to_delete)
+
+    # 删完后若 collection 为空，自动清理之
+    remaining = collection.get()
+    if not remaining["ids"]:
+        remove_category_index(category)
+
     return len(ids_to_delete)
 
 
