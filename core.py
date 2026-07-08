@@ -58,7 +58,7 @@ class RAGConfig:
     chunk_overlap: int = 150
     search_top_k: int = 5
     tool_top_k: int = 3
-    agent_max_turns: int = 6
+    agent_max_turns: int = 4
     embedding_batch_size: int = 32
     embedding_model: str = "BAAI/bge-m3"
     llm_model: str = "deepseek-chat"
@@ -255,10 +255,10 @@ RAG_SYSTEM_PROMPT = """
 3. 评估完整性：检索到的资料够不够回答？不够就调整 query 或换分类再搜
 4. 综合回答：汇总所有子问题的结果，给出最终答案
 
-# 查询拆分原则
-- 复杂问题拆成多个简单子问题，逐个 query 检索
-- 例："年假制度和报销流程" → 拆为"年假制度"和"报销流程"两次检索
-- 每个子问题可以根据其内容指定不同分类（技术文档/规章制度/产品手册/培训资料/FAQ）
+# 查询拆分原则（支持并行）
+- 复杂问题拆成多个简单子问题，互不依赖的子问题必须并行调用 search_knowledge
+- 例："年假制度和报销流程" → 同时调 search_knowledge(policy,"年假") + search_knowledge(policy,"报销")
+- 每个子问题可根据内容指定不同分类，无依赖关系时一次返回多个 tool_call
 
 # 工具使用规则
 - 需要知识库信息时，调用 search_knowledge 工具（指定 category 和 query）
